@@ -10,6 +10,16 @@
       <Platform>Win32</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="drive.h" />
+    <ClInclude Include="nav.h" />
+    <ClInclude Include="sonar.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="drive.cpp" />
+    <ClCompile Include="nav.cpp" />
+    <ClCompile Include="sonar.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{8946205D-2AC8-4E8A-8405-71A409116172}</ProjectGuid>
     <RootNamespace>Capstone17LD3</RootNamespace>
@@ -63,8 +73,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
