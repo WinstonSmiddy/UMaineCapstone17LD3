@@ -1,16 +1,16 @@
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
-#include <RunningMedian.h>
+#include <SD.h>
 
-#define DEBUG_PRINT_TIME 3
+#define DEBUG true
+#define DEBUG_PRINT_TIME 1
 #define DEBUG_GPS_RAW  false
-#define DEBUG_GPS_TIDY true
+#define DEBUG_MOTORS true
 
-#define CONST_BAUD_GPS 9600 // Could use 4800 if needed, but 9600 is default
+#define CONST_BAUD_GPS 9600  // Could use 4800 if needed, but 9600 is default
 #define CONST_BAUD_SERIAL 115200
-#define CONST_FILTER_SIZE 15
-
-// #define CONST_QUARTILE_SIZE (int)(CONST_FILTER_SIZE / 4)
+#define CONST_FILTER_SIZE 64 // Multiples of 4
+#define CONST_QUARTILE_SIZE (int)(CONST_FILTER_SIZE / 4)
 
 #define in1 3
 #define in2 4
@@ -19,44 +19,46 @@
 #define ENA 2
 #define ENB 7
 #define ABS 120
+#define PIN_ENGINE_SWITCH 13
 
 // Make sure the switch is set to SoftSerial
 SoftwareSerial mySerial(8, 7);
 Adafruit_GPS   GPS(&mySerial);
 
-boolean usingInterrupt = true;
+int motorState = 0;
+
+boolean useMotors = false;
+boolean haveGPS   = false;
 
 int arrCounter = 0;
 
 uint32_t timer = millis();
 
-RunningMedian lat = RunningMedian(CONST_FILTER_SIZE);
-RunningMedian lon = RunningMedian(CONST_FILTER_SIZE);
-float latAvg;
-float lonAvg;
+float arr_lat_raw[CONST_FILTER_SIZE];
+float arr_lon_raw[CONST_FILTER_SIZE];
+float lat_filtered = 0.0f;
+float lon_filtered = 0.0f;
 
-// float arr_lat_raw[CONST_FILTER_SIZE];
-// float arr_lon_raw[CONST_FILTER_SIZE];
-// float lat_filtered = 0.0f;
-// float lon_filtered = 0.0f;
-
-void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
-void _mForward();
-void _mBack();
-void _mLeft();
-void _mRight();
-void _mStop();
 
 void setup()
 {
+  pinMode(PIN_ENGINE_SWITCH,INPUT);
+  pinMode(in1,              OUTPUT);
+  pinMode(in2,              OUTPUT);
+  pinMode(in3,              OUTPUT);
+  pinMode(in4,              OUTPUT);
+  pinMode(ENA,              OUTPUT);
+  pinMode(ENB,              OUTPUT);
+
   Serial.begin(CONST_BAUD_SERIAL); // Don't wanna drop chars
+
+  OCR0A   = 0xAF;
+  TIMSK0 |= _BV(OCIE0A);
   GPS.begin(CONST_BAUD_GPS);
 
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);            // Request updates on antenna status
-
-  useInterrupt(true);
 
   mySerial.println(PMTK_Q_RELEASE);
 }
@@ -75,52 +77,35 @@ SIGNAL(TIMER0_COMPA_vect) {
 
 void loop()
 {
-  // in case you are not using the interrupt above, you'll
-  // need to 'hand query' the GPS, not suggested :(
-  if (!usingInterrupt) {
-    // read data from the GPS in the 'main loop'
-    char c = GPS.read();
+  useMotors = digitalRead(PIN_ENGINE_SWITCH);
 
-    // if you want to debug, this is a good time to do it!
-    if (DEBUG_GPS_RAW)
-      if (c) Serial.print(c);
-  }
+  _mBack();
 
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA())) return;
   }
 
-  timer = (timer > millis()) ? millis() : timer;
+  haveGPS = (GPS.fix && (GPS.satellites != 0));
+  timer   = (timer > millis()) ? millis() : timer;
 
-  lat.add(GPS.latitude);
-  lon.add(GPS.longitude);
+  arr_lat_raw[arrCounter] = GPS.latitude;
+  arr_lon_raw[arrCounter] = GPS.longitude;
 
-  latAvg = lat.getMedian();
-  lonAvg = lon.getMedian();
+  arrCounter++;
 
-  // arr_lat_raw[arrCounter] = GPS.latitude;
-  // arr_lon_raw[arrCounter] = GPS.longitude;
+  if (arrCounter >= (CONST_FILTER_SIZE - 1))
+  {
+    lat_filtered = getIQM(arr_lat_raw,CONST_FILTER_SIZE);
+    lon_filtered = getIQM(arr_lon_raw,CONST_FILTER_SIZE);
+    arrCounter   = 0;
+  }
 
-  // arrCounter++;
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //  DEBUG
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  // if (arrCounter == (CONST_FILTER_SIZE - 1))
-  // {
-  //  lat_filtered = lon_filtered = 0;
-
-  //  for (int i = CONST_QUARTILE_SIZE - 1;
-  //       i < (CONST_FILTER_SIZE - CONST_QUARTILE_SIZE - 1); i++)
-  //  {
-  //    lat_filtered += arr_lat_raw[i];
-  //    lon_filtered += arr_lon_raw[i];
-  //  }
-  //  lat_filtered /= (CONST_QUARTILE_SIZE * 2);
-  //  lon_filtered /= (CONST_QUARTILE_SIZE * 2);
-
-  //  arrCounter = 0;
-  // }
-
-  #ifdef DEBUG_GPS_TIDY
+  #ifdef DEBUG
 
   if (millis() - timer > DEBUG_PRINT_TIME * 1000) {
     timer = millis(); // reset the timer
@@ -130,81 +115,130 @@ void loop()
     Serial.print(GPS.minute, DEC); Serial.print(':');
     Serial.print(GPS.seconds,DEC);
 
-    if (GPS.fix) {
+    if (haveGPS) {
       Serial.print(" - "); Serial.print((int)GPS.satellites);
       Serial.println(
         " satellites connected.");
-      Serial.print("Location (raw.): "); Serial.print(GPS.latitude,4);
-      Serial.print(", "); Serial.println(GPS.longitude,4);
-
-      Serial.print("Location (flt.): "); Serial.print(latAvg,4);
-      Serial.print(", "); Serial.println(lonAvg,4);
+      Serial.print("Location: "); Serial.print(lat_filtered,5);
+      Serial.print(", "); Serial.println(lon_filtered,5);
     } else Serial.println("\n!!! NO GPS FIX !!!");
+    # ifdef DEBUG_MOTORS
+    Serial.print("Motor State: ");
+
+    switch (motorState) {
+    case 0: Serial.println("Stopped");
+      break;
+
+    case 1: Serial.println("Forward");
+      break;
+
+    case 2: Serial.println("Backward");
+      break;
+
+    case 3: Serial.println("Left");
+      break;
+
+    case 4: Serial.println("Right");
+      break;
+    }
+    # endif // ifdef DEBUG_MOTORS
   }
-  #endif // ifdef DEBUG_GPS_TIDY
+  #endif    // ifdef
 }
 
-void useInterrupt(boolean v) {
-  if (v) {
-    // Timer0 is already used for millis() - we'll just interrupt somewhere
-    // in the middle and call the "Compare A" function above
-    OCR0A          = 0xAF;
-    TIMSK0        |= _BV(OCIE0A);
-    usingInterrupt = true;
-  } else {
-    // do not call the interrupt function COMPA anymore
-    TIMSK0        &= ~_BV(OCIE0A);
-    usingInterrupt = false;
-  }
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// EXTERNAL FUNCTIONS
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void _mForward()
 {
-  analogWrite(ENA,ABS);
-  analogWrite(ENB,ABS);
-  digitalWrite(in1,LOW);
-  digitalWrite(in2,HIGH);
-  digitalWrite(in3,LOW);
-  digitalWrite(in4,HIGH);
-  Serial.println("go forward!");
+  if (useMotors)
+  {
+    digitalWrite(ENA,HIGH);
+    digitalWrite(ENB,HIGH);
+    digitalWrite(in1,LOW);
+    digitalWrite(in2,HIGH);
+    digitalWrite(in3,LOW);
+    digitalWrite(in4,HIGH);
+    motorState = 1;
+  } else _mStop();
 }
 
 void _mBack()
 {
-  analogWrite(ENA,ABS);
-  analogWrite(ENB,ABS);
-  digitalWrite(in1,HIGH);
-  digitalWrite(in2,LOW);
-  digitalWrite(in3,HIGH);
-  digitalWrite(in4,LOW);
-  Serial.println("go back!");
+  if (useMotors)
+  {
+    digitalWrite(ENA,HIGH);
+    digitalWrite(ENB,HIGH);
+    digitalWrite(in1,HIGH);
+    digitalWrite(in2,LOW);
+    digitalWrite(in3,HIGH);
+    digitalWrite(in4,LOW);
+    motorState = 2;
+  } else _mStop();
 }
 
 void _mLeft()
 {
-  analogWrite(ENA,ABS);
-  analogWrite(ENB,ABS);
-  digitalWrite(in1,LOW);
-  digitalWrite(in2,HIGH);
-  digitalWrite(in3,HIGH);
-  digitalWrite(in4,LOW);
-  Serial.println("go left!");
+  if (useMotors)
+  {
+    digitalWrite(ENA,HIGH);
+    digitalWrite(ENB,HIGH);
+    digitalWrite(in1,LOW);
+    digitalWrite(in2,HIGH);
+    digitalWrite(in3,HIGH);
+    digitalWrite(in4,LOW);
+    motorState = 3;
+  } else _mStop();
 }
 
 void _mRight()
 {
-  analogWrite(ENA,ABS);
-  analogWrite(ENB,ABS);
-  digitalWrite(in1,HIGH);
-  digitalWrite(in2,LOW);
-  digitalWrite(in3,LOW);
-  digitalWrite(in4,HIGH);
-  Serial.println("go right!");
+  if (useMotors)
+  {
+    digitalWrite(ENA,HIGH);
+    digitalWrite(ENB,HIGH);
+    digitalWrite(in1,HIGH);
+    digitalWrite(in2,LOW);
+    digitalWrite(in3,LOW);
+    digitalWrite(in4,HIGH);
+    motorState = 4;
+  } else _mStop();
 }
 
 void _mStop()
 {
   digitalWrite(ENA,LOW);
   digitalWrite(ENB,LOW);
-  Serial.println("Stop!");
+  motorState = 0;
+}
+
+void bubble_sort(float arr[],int n)
+{
+  for (int i = 0; i < n; ++i)
+    for (int j = 0; j < n - i - 1; ++j)
+      if (arr[j] > arr[j + 1])
+      {
+        float temp = arr[j];
+        arr[j]     = arr[j + 1];
+        arr[j + 1] = temp;
+      }
+}
+
+float getIQM(float arr[],int n)
+{
+  bubble_sort(arr,CONST_FILTER_SIZE);
+
+  float filtered = 0.0f; // = arr[(CONST_FILTER_SIZE - 1) / 2]; // 0.0f;
+
+  int m = (int)(n / 4);
+
+  for (int i = m - 1;
+       i < (n - m - 1); i++)
+  {
+    filtered += arr[i];
+  }
+  filtered /= (m * 2);
+
+  return filtered;
 }
