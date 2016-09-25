@@ -8,7 +8,9 @@
 // /____/\____/_/  /_/   /_____/_____/____/
 //
 // UNIVERSITY OF MAINE - SENIOR CAPSTONE, CLASS OF 2017
-// LAND DRONE 3:  W. GREGORY SMIDDY  |  SPENCER BERNIER  |  KAITLYN SEEHUSEN  |  SHANE CYR
+//
+//   LAND DRONE 3:
+//     W. GREGORY SMIDDY  |  SPENCER BERNIER  |  KAITLYN SEEHUSEN  |  SHANE CYR
 //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -17,10 +19,13 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
-#include <SD.h>
+
 #include <Wire.h>
 #include <LSM303.h>
 #include <RunningMedian.h>
+
+// #include <SPI.h>
+// #include <SD.h>
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  PREPROCESSOR DEFINITIONS
@@ -30,10 +35,11 @@
 #define DEBUG_DEC_PRECISION 4
 #define DEBUG_GPS_RAW  false
 #define DEBUG_MOTORS true
+#define LOOP_DELAY 100
 
-#define CONST_BAUD_GPS 9600  // Could use 4800 if needed, but 9600 is default
+#define CONST_BAUD_GPS 9600 // Could use 4800 if needed, but 9600 is default
 #define CONST_BAUD_SERIAL 115200
-#define CONST_FILTER_SIZE 11 // 1 to 19
+#define CONST_FILTER_SIZE 5 // 1 to 19
 #define CONST_PI 3.14159265
 #define CONST_G 9.805
 #define CONST_xRawMin -16384
@@ -42,6 +48,7 @@
 #define CONST_yRawMax 16384
 #define CONST_zRawMin -16384
 #define CONST_zRawMax 16384
+#define ABS 120 // PWM value for motors (constant for now)
 
 #define in1 3
 #define in2 4
@@ -49,13 +56,14 @@
 #define in4 6
 #define ENA 2
 #define ENB 7
-#define ABS 120
+
+// #define PIN_SD_RW 10
 #define PIN_ENGINE_SWITCH 13
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  CUSTOM CLASSES
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class Coordinate {
+class Coord {
 public:
 
   float lat;
@@ -63,27 +71,23 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  GLOBAL OBJECTS
+//  GLOBAL OBJECTS & VARIABLES
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// MAKE SURE THE SWITCH ON THE GPS SHIELD IS SET TO "SOFTSERIAL"
-SoftwareSerial mySerial(8, 7);
+SoftwareSerial mySerial(8, 7); // MAKE SURE THE SWITCH ON THE GPS SHIELD IS SET TO "SOFTSERIAL"
 Adafruit_GPS   GPS(&mySerial);
 
 LSM303 compass;
 LSM303::vector<float> mag = { 0.0f, 0.0f, 0.0f },
                       accel_G = { 0.0f, 0.0f, 0.0f };
 
-Coordinate loc;
-Coordinate wpt1;
+Coord loc;
+Coord wpt1;
 
 RunningMedian arr_lat_raw = RunningMedian(CONST_FILTER_SIZE);
 RunningMedian arr_lon_raw = RunningMedian(CONST_FILTER_SIZE);
 RunningMedian arr_mx_raw  = RunningMedian(CONST_FILTER_SIZE);
 RunningMedian arr_my_raw  = RunningMedian(CONST_FILTER_SIZE);
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  GLOBAL VARIABLES
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 uint32_t timer = millis(); // Global millisecond timer
 int motorState = 0;        // Tracks the state of the motor (or rather, the motor's commanded state)
 int arrCounter = 0;        // Dumb counter to stop and filter the GPS signal
@@ -91,7 +95,7 @@ int arrCounter = 0;        // Dumb counter to stop and filter the GPS signal
 boolean useMotors = false;
 boolean haveGPS   = false;
 
-float heading = 0.0f;
+float hdg = 0.0f;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SETUP FUNCTION
@@ -147,6 +151,7 @@ void loop()
   timer     = (timer > millis()) ? millis() : timer;
 
   getPhysicalStatus();
+  _mForward();
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //  DEBUG
@@ -165,10 +170,11 @@ void loop()
       Serial.print(" - "); Serial.print((int)GPS.satellites);
       Serial.println(
         " satellites connected.");
-      Serial.print("Location: "); Serial.print(lat,5);
-      Serial.print(", "); Serial.println(lon,5);
+      Serial.print("Location: ");
+      Serial.print(loc.lat, 5);
+      Serial.print(", "); Serial.println(loc.lon,5);
     } else Serial.println("\n!!! NO GPS FIX !!!");
-    Serial.print("Heading (deg.): "); Serial.println(heading);
+    Serial.print("hdg (deg.): "); Serial.println(hdg);
     Serial.print("Acceleration (Gs): ");
     Serial.print(accel_G.x, DEBUG_DEC_PRECISION); Serial.print(", ");
     Serial.print(accel_G.y, DEBUG_DEC_PRECISION); Serial.print(", ");
@@ -198,6 +204,7 @@ void loop()
     # endif // ifdef DEBUG_MOTORS
   }
   #endif    // ifdef
+  delay(LOOP_DELAY);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -216,13 +223,13 @@ void getPhysicalStatus()
   accel_G.y = (map(compass.a.y,CONST_yRawMin,CONST_yRawMax,-1000,1000)) / 1000.0;
   accel_G.z = (map(compass.a.z,CONST_zRawMin,CONST_zRawMax,-1000,1000)) / 1000.0;
 
-  arr_lat_raw.add(GPS.latitude);
-  arr_lon_raw.add(GPS.longitude);
+  arr_lat_raw.add(GPS.latitudeDegrees);
+  arr_lon_raw.add(GPS.longitudeDegrees);
   arr_mx_raw.add(compass.m.x);
   arr_my_raw.add(compass.m.y);
 
-  heading = (atan2(mag.y,mag.x) * 180) / CONST_PI;
-  heading = (heading < 0) ? heading + 360 : heading;
+  hdg = (atan2(mag.y,mag.x) * 180) / CONST_PI;
+  hdg = (hdg < 0) ? hdg + 360 : hdg;
 
   arrCounter++;
 
@@ -230,8 +237,8 @@ void getPhysicalStatus()
   {
     loc.lat = arr_lat_raw.getMedian();
     loc.lon = arr_lon_raw.getMedian();
-    mag.x   = arr_mx_raw.getMedian();
     mag.y   = arr_my_raw.getMedian();
+    mag.x   = arr_mx_raw.getMedian();
 
     arrCounter = 0;
   }
@@ -300,11 +307,11 @@ void _mStop()
   motorState = 0;
 }
 
-float desiredHeading(Coordinate start,Coordinate end)
+float desiredhdg(Coord start,Coord end)
 {
   float dPhi =
     log(tan(end.lat / 2 + CONST_PI / 4) / tan(start.lat / 2 + CONST_PI / 4));
   float dLon = abs(start.lon - end.lon);
 
-  return atan2(dLon / dPhi);
+  return atan2(dPhi,dLon);
 }
