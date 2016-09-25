@@ -1,5 +1,5 @@
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //
 //    ___   ____ ________    __    ____ _____
 //   |__ \ / __ <  /__  /   / /   / __ \__  /
@@ -48,6 +48,7 @@
 #define CONST_yRawMax 16384
 #define CONST_zRawMin -16384
 #define CONST_zRawMax 16384
+#define CONST_RAD_TO_DEG 57.2958
 #define ABS 120 // PWM value for motors (constant for now)
 
 #define in1 3
@@ -81,7 +82,8 @@ LSM303::vector<float> mag = { 0.0f, 0.0f, 0.0f },
                       accel_G = { 0.0f, 0.0f, 0.0f };
 
 Coord loc;
-Coord wpt1;
+Coord wpt1 { 44.894762, -68.659236 };
+Coord wpt2 { 44.894813, -68.658975 };
 
 RunningMedian arr_lat_raw = RunningMedian(CONST_FILTER_SIZE);
 RunningMedian arr_lon_raw = RunningMedian(CONST_FILTER_SIZE);
@@ -90,12 +92,13 @@ RunningMedian arr_my_raw  = RunningMedian(CONST_FILTER_SIZE);
 
 uint32_t timer = millis(); // Global millisecond timer
 int motorState = 0;        // Tracks the state of the motor (or rather, the motor's commanded state)
-int arrCounter = 0;        // Dumb counter to stop and filter the GPS signal
+
 
 boolean useMotors = false;
 boolean haveGPS   = false;
 
-float hdg = 0.0f;
+float hdg   = 0.0f;
+float track = 0.0f;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SETUP FUNCTION
@@ -147,11 +150,17 @@ SIGNAL(TIMER0_COMPA_vect) {
 void loop()
 {
   useMotors = digitalRead(PIN_ENGINE_SWITCH); // Check physical switch and set boolean accordingly
-  haveGPS   = (GPS.fix && (GPS.satellites != 0));
+  haveGPS   = true;                           // (GPS.fix && (GPS.satellites != 0));
   timer     = (timer > millis()) ? millis() : timer;
 
-  getPhysicalStatus();
-  _mForward();
+  // getPhysicalStatus();
+  _mRight();
+  delay(30 * 1000);
+  _mLeft();
+  delay(30 * 1000);
+
+
+  // float track = desiredHdg(wpt2,wpt1);
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //  DEBUG
@@ -171,14 +180,15 @@ void loop()
       Serial.println(
         " satellites connected.");
       Serial.print("Location: ");
-      Serial.print(loc.lat, 5);
-      Serial.print(", "); Serial.println(loc.lon,5);
+      Serial.print(loc.lat, DEBUG_DEC_PRECISION);
+      Serial.print(", "); Serial.println(loc.lon,DEBUG_DEC_PRECISION);
     } else Serial.println("\n!!! NO GPS FIX !!!");
     Serial.print("hdg (deg.): "); Serial.println(hdg);
     Serial.print("Acceleration (Gs): ");
     Serial.print(accel_G.x, DEBUG_DEC_PRECISION); Serial.print(", ");
     Serial.print(accel_G.y, DEBUG_DEC_PRECISION); Serial.print(", ");
     Serial.println(accel_G.z, DEBUG_DEC_PRECISION);
+    Serial.print("Track (deg.): "); Serial.println(track,DEBUG_DEC_PRECISION);
     # ifdef DEBUG_MOTORS
     Serial.print("Motor State: ");
 
@@ -212,6 +222,8 @@ void loop()
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void getPhysicalStatus()
 {
+  static int arrCounter = 0;
+
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA())) return;
@@ -229,7 +241,7 @@ void getPhysicalStatus()
   arr_my_raw.add(compass.m.y);
 
   hdg = (atan2(mag.y,mag.x) * 180) / CONST_PI;
-  hdg = (hdg < 0) ? hdg + 360 : hdg;
+  hdg = (hdg < 0) ? hdg + 360 : hdg; // Normalize 0-360
 
   arrCounter++;
 
@@ -307,11 +319,13 @@ void _mStop()
   motorState = 0;
 }
 
-float desiredhdg(Coord start,Coord end)
+float desiredHdg(Coord start,Coord end)
 {
   float dPhi =
     log(tan(end.lat / 2 + CONST_PI / 4) / tan(start.lat / 2 + CONST_PI / 4));
-  float dLon = abs(start.lon - end.lon);
+  float dLon  = abs(start.lon - end.lon);
+  float track = atan2(dPhi,dLon) * CONST_RAD_TO_DEG;
 
-  return atan2(dPhi,dLon);
+  if (track < 0) track += 360;
+  return track;
 }
