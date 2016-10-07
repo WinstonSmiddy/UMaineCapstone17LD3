@@ -150,17 +150,12 @@ SIGNAL(TIMER0_COMPA_vect) {
 void loop()
 {
   useMotors = digitalRead(PIN_ENGINE_SWITCH); // Check physical switch and set boolean accordingly
-  haveGPS   = true;                           // (GPS.fix && (GPS.satellites != 0));
+  haveGPS   = (GPS.fix && (GPS.satellites != 0));
   timer     = (timer > millis()) ? millis() : timer;
 
-  // getPhysicalStatus();
-  _mRight();
-  delay(30 * 1000);
-  _mLeft();
-  delay(30 * 1000);
+  getPhysicalStatus();
 
-
-  // float track = desiredHdg(wpt2,wpt1);
+  float track = desiredHdg(wpt2,wpt1);
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //  DEBUG
@@ -180,15 +175,15 @@ void loop()
       Serial.println(
         " satellites connected.");
       Serial.print("Location: ");
-      Serial.print(loc.lat, DEBUG_DEC_PRECISION);
-      Serial.print(", "); Serial.println(loc.lon,DEBUG_DEC_PRECISION);
+      Serial.print(loc.lat, 6);
+      Serial.print(", "); Serial.println(loc.lon,6);
     } else Serial.println("\n!!! NO GPS FIX !!!");
     Serial.print("hdg (deg.): "); Serial.println(hdg);
     Serial.print("Acceleration (Gs): ");
-    Serial.print(accel_G.x, DEBUG_DEC_PRECISION); Serial.print(", ");
-    Serial.print(accel_G.y, DEBUG_DEC_PRECISION); Serial.print(", ");
-    Serial.println(accel_G.z, DEBUG_DEC_PRECISION);
-    Serial.print("Track (deg.): "); Serial.println(track,DEBUG_DEC_PRECISION);
+    Serial.print(accel_G.x, 1); Serial.print(", ");
+    Serial.print(accel_G.y, 1); Serial.print(", ");
+    Serial.println(accel_G.z, 1);
+    Serial.print("Track (deg.): "); Serial.println(track,1);
     # ifdef DEBUG_MOTORS
     Serial.print("Motor State: ");
 
@@ -240,7 +235,7 @@ void getPhysicalStatus()
   arr_mx_raw.add(compass.m.x);
   arr_my_raw.add(compass.m.y);
 
-  hdg = (atan2(mag.y,mag.x) * 180) / CONST_PI;
+  hdg = (atan2(-mag.x,mag.y) * 180) / CONST_PI;
   hdg = (hdg < 0) ? hdg + 360 : hdg; // Normalize 0-360
 
   arrCounter++;
