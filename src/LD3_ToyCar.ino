@@ -30,13 +30,13 @@
 #define CONST_PI 3.14159265
 #define CONST_G 9.805
 #define CONST_RAD_TO_DEG 57.2958
-#define CONST_FULL_TURN_RATE_DEGS 43.0
-#define CONST_TOL_HDG 3.0
-#define CONST_TOL_LOC 0.00002
+#define CONST_FULL_TURN_RATE_DEGS 50.0
+#define CONST_TOL_HDG 4.0
+#define CONST_TOL_LOC 0.00001
 #define CONST_NUM_WPTS 5
 #define CONST_MAG_VAR 0//-17.0
 
-#define ABS 150 // If you change this, change the CONST_FULL_TURN_RATE_DEGS as well
+#define ABS 155 // If you change this, change the CONST_FULL_TURN_RATE_DEGS as well
 #define in1 2
 #define in2 3
 #define in3 4
@@ -149,8 +149,8 @@ void getPhysicalStatus()
   loc.lat = GPS.latitudeDegrees;
   loc.lon = GPS.longitudeDegrees;
 
-  locError = sqrt(pow((loc.lat - wpt[nextWpt].lat),2) +
-                  pow((loc.lon - wpt[nextWpt].lon),2));
+  locError = sqrt(pow((loc.lat - wpt[nextWpt-1].lat),2) +
+                  pow((loc.lon - wpt[nextWpt-1].lon),2));
 
 
   compass.read();
@@ -159,7 +159,7 @@ void getPhysicalStatus()
 
   if (heading < 0) heading += 360;
 
-  track = desiredHeading(loc,wpt[nextWpt]);
+  track = desiredHeading(loc,wpt[nextWpt-1]);
 
   headingError = heading - track;
 }
