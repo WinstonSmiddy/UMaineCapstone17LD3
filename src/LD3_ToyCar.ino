@@ -34,7 +34,7 @@
 #define CONST_TOL_HDG 3.0
 #define CONST_TOL_LOC 0.00003
 #define CONST_NUM_WPTS 2
-#define CONST_MAG_VAR 17.0
+#define CONST_MAG_VAR 0//-17.0
 
 #define ABS 150 // If you change this, change the CONST_FULL_TURN_RATE_DEGS as well
 #define in1 2
