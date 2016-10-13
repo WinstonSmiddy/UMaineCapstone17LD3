@@ -34,6 +34,7 @@
 #define CONST_TOL_HDG 3.0
 #define CONST_TOL_LOC 0.00003
 #define CONST_NUM_WPTS 2
+#define CONST_MAG_VAR 17.0
 
 #define ABS 150 // If you change this, change the CONST_FULL_TURN_RATE_DEGS as well
 #define in1 2
@@ -82,8 +83,7 @@ float heading      = 0.0f;
 float track        = 0.0f;
 float headingError = 0.0f;
 float locError     = 0.0f;
-
-float turnRate = CONST_FULL_TURN_RATE_DEGS;
+float turnRate     = CONST_FULL_TURN_RATE_DEGS;
 
 SIGNAL(TIMER0_COMPA_vect) {
   char c = GPS.read();
@@ -106,7 +106,7 @@ void loop()
 
   getPhysicalStatus();
 
-  if (flag_haveGPS && !(flag_done))
+  if (flag_haveGPS && !(flag_done) && flag_useMotors)
   {
     if (locError > CONST_TOL_LOC)
     {
@@ -156,7 +156,7 @@ void getPhysicalStatus()
 
   compass.read();
 
-  heading = atan2(-compass.m.y,compass.m.x) * CONST_RAD_TO_DEG;
+  heading = (atan2(-compass.m.y,compass.m.x) * CONST_RAD_TO_DEG) + CONST_MAG_VAR;
 
   if (heading < 0) heading += 360;
 
@@ -275,6 +275,7 @@ void doDebug() {
     Serial.print("Heading (deg.): "); Serial.println(heading);
     Serial.print("Track (deg.): "); Serial.println(track);
     Serial.print("Hdg Err. (deg.): "); Serial.println(headingError);
+    Serial.print("Mag Var"); Serial.println(GPS.magvariation);
     # ifdef DEBUG_MOTORS
     Serial.print("Motor Command: ");
 
@@ -341,9 +342,9 @@ void doSetup()
   TIMSK0 |= _BV(OCIE0A);
   GPS.begin(CONST_BAUD_GPS);
 
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
-  GPS.sendCommand(PGCMD_ANTENNA);            // Request updates on antenna status
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_ALLDATA);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate
+  GPS.sendCommand(PGCMD_ANTENNA);             // Request updates on antenna status
 
   mySerial.println(PMTK_Q_RELEASE);
 }
