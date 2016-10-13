@@ -21,7 +21,7 @@
 //  PREPROCESSOR DEFINITIONS
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #define DEBUG true
-#define DEBUG_PRINT_TIME 1
+#define DEBUG_PRINT_TIME 3
 #define DEBUG_MOTORS true
 
 #define CONST_LOOP_DELAY 100
@@ -32,8 +32,8 @@
 #define CONST_RAD_TO_DEG 57.2958
 #define CONST_FULL_TURN_RATE_DEGS 43.0
 #define CONST_TOL_HDG 3.0
-#define CONST_TOL_LOC 0.00003
-#define CONST_NUM_WPTS 2
+#define CONST_TOL_LOC 0.00002
+#define CONST_NUM_WPTS 5
 #define CONST_MAG_VAR 0//-17.0
 
 #define ABS 150 // If you change this, change the CONST_FULL_TURN_RATE_DEGS as well
@@ -61,14 +61,13 @@ Adafruit_GPS   GPS(&mySerial);
 LSM303 compass;
 
 Coord loc;
-
-// Coord wpt[CONST_NUM_WPTS] { { 44.90530776, -68.66659428 },
-//                             { 44.90514437, -68.66658719 },
-//                             { 44.90513722, -68.66639802 },
-//                             { 44.90531539, -68.66641304 },
-//                             { 44.90528110, -68.66696930 } };
-Coord wpt[CONST_NUM_WPTS] { { 44.894892, -68.659204 },
-                            { 44.895003, -68.659327 } };
+Coord wpt[CONST_NUM_WPTS] { { 44.90530776, -68.66659428 },
+                            { 44.90514437, -68.66658719 },
+                            { 44.90513722, -68.66639802 },
+                            { 44.90531539, -68.66641304 },
+                            { 44.90528110, -68.66696930 } };
+// Coord wpt[CONST_NUM_WPTS] { { 44.894892, -68.659204 },
+//                             { 44.895003, -68.659327 } };
 
 uint32_t timer   = millis(); // Global millisecond timer
 int motorState   = 0;        // Tracks the state of the motor (or rather, the motor's commanded state)
@@ -263,60 +262,43 @@ void doDebug() {
 
     if (flag_haveGPS) {
       Serial.print(" - "); Serial.print((int)(timer / 1000));
-      Serial.print(" seconds elapsed - ");
+      Serial.println(" seconds elapsed.");
       Serial.print((int)GPS.satellites); Serial.println(" satellites connected.");
       Serial.print("Going to waypoint "); Serial.print(nextWpt);
-      Serial.print(" of "); Serial.println(CONST_NUM_WPTS);
+      Serial.print(" of "); Serial.print(CONST_NUM_WPTS); Serial.println(".");
+      # ifdef DEBUG_MOTORS
+      Serial.print("Command : ");
+
+      switch (motorCommand) {
+      case 0: Serial.print("Stopped");
+        break;
+
+      case 1: Serial.print("Forward");
+        break;
+
+      case 2: Serial.print("Backward");
+        break;
+
+      case 3: Serial.print("Left");
+        break;
+
+      case 4: Serial.print("Right");
+        break;
+      }
+
+      if (!flag_useMotors) Serial.println(" - Motors disabled.");
+      else Serial.println(" - Motors enabled.");
+      # endif // ifdef DEBUG_MOTORS
+      Serial.println();
       Serial.print("Location: ");
       Serial.print(loc.lat,6);
       Serial.print(", "); Serial.println(loc.lon,6);
-      Serial.print("Loc Error: "); Serial.println(locError,6);
+      Serial.print("Loc Err : "); Serial.println(locError,6);
     } else Serial.println("\n!!! NO GPS FIX !!!");
-    Serial.print("Heading (deg.): "); Serial.println(heading);
-    Serial.print("Track (deg.): "); Serial.println(track);
-    Serial.print("Hdg Err. (deg.): "); Serial.println(headingError);
-    Serial.print("Mag Var"); Serial.println(GPS.magvariation);
-    # ifdef DEBUG_MOTORS
-    Serial.print("Motor Command: ");
-
-    switch (motorCommand) {
-    case 0: Serial.println("Stopped");
-      break;
-
-    case 1: Serial.println("Forward");
-      break;
-
-    case 2: Serial.println("Backward");
-      break;
-
-    case 3: Serial.println("Left");
-      break;
-
-    case 4: Serial.println("Right");
-      break;
-    }
-    Serial.print("Motor State: ");
-
-    switch (motorState) {
-    case 0: Serial.print("Stopped");
-      break;
-
-    case 1: Serial.print("Forward");
-      break;
-
-    case 2: Serial.print("Backward");
-      break;
-
-    case 3: Serial.print("Left");
-      break;
-
-    case 4: Serial.print("Right");
-      break;
-    }
-
-    if (!flag_useMotors) Serial.println(" (switch is off)");
-    else Serial.println(" (by logic)");
-    # endif // ifdef DEBUG_MOTORS
+    Serial.print("Heading : "); Serial.println(heading);
+    Serial.print("Track   : "); Serial.println(track);
+    Serial.print("Hdg Err : "); Serial.println(headingError);
+    Serial.println();Serial.println();Serial.println();Serial.println();
   }
 }
 
