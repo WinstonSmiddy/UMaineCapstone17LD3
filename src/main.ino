@@ -21,6 +21,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  PREPROCESSOR DEFINITIONS
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define MOTOR_TEST true
 #define DEBUG true
 #define DEBUG_PRINT_TIME 1
 #define DEBUG_MOTORS true
@@ -43,6 +44,8 @@
 #define in4 5
 #define ENA 1
 #define ENB 6
+#define LMOTOR 11
+#define RMOTOR 12
 #define PIN_ENGINE_SWITCH 13
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -100,6 +103,16 @@ void setup()
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop()
 {
+  #ifdef MOTOR_TEST
+  while(true) {
+    if (digitalRead(PIN_ENGINE_SWITCH)) {
+      digitalWrite(LMOTOR);
+    } else {
+      digitalWrite(RMOTOR);
+    }
+  }
+  #endif
+
   timer = (timer > millis()) ? millis() : timer;
 
   flag_useMotors = digitalRead(PIN_ENGINE_SWITCH); // Check physical switch and set boolean accordingly
@@ -331,6 +344,8 @@ void doSetup()
   pinMode(in4,              OUTPUT);
   pinMode(ENA,              OUTPUT);
   pinMode(ENB,              OUTPUT);
+  pinMode(LMOTOR,OUTPUT);
+  pinMode(RMOTOR,OUTPUT);
 
   Serial.begin(CONST_BAUD_SERIAL);
 
